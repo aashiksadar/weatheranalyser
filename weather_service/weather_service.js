@@ -30,7 +30,7 @@ async function insertSampleTemperatureLabels() {
 }
 const {CREATE_SAMPLE_DATA } = process.env;
 
-if(CREATE_SAMPLE_DATA) {
+if(CREATE_SAMPLE_DATA && !!CREATE_SAMPLE_DATA) {
     insertSampleTemperatureLabels();
 }
 

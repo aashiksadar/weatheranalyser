@@ -46,7 +46,7 @@ async function createSampleUsers() {
 }
 
 const { CREATE_SAMPLE_USERS } = process.env;
-if (CREATE_SAMPLE_USERS && !CREATE_SAMPLE_USERS) {
+if (CREATE_SAMPLE_USERS && !!CREATE_SAMPLE_USERS) {
   createSampleUsers();
 }
 
