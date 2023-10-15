@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package auth;
+
+service AuthService {
+  rpc isAccessTokenValid (AccessTokenRequest) returns (AccessTokenResponse);
+}
+
+message AccessTokenRequest {
+  string accessToken = 1;
+}
+
+message AccessTokenResponse {
+  bool isValid = 1;
+}
+
