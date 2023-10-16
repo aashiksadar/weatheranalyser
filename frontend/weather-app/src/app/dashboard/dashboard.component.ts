@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-
+import { Router } from '@angular/router';
 @Component({
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
@@ -12,7 +12,7 @@ export class DashboardComponent implements OnInit {
   weatherData: any[] = [
   ];
 
-  constructor(private http: HttpClient) {
+  constructor(private http: HttpClient, private router: Router) {
     console.log('DashboardComponent constructor called');
   }
 
@@ -31,6 +31,12 @@ export class DashboardComponent implements OnInit {
         this.weatherData.push({city: `${city}`, ...response});
       });
     });
+  }
+
+  logout(): void {
+    localStorage.removeItem('token');
+
+    this.router.navigate(['/login']);
   }
 
   ngOnInit(): void {
