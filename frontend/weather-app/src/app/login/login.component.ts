@@ -17,6 +17,7 @@ export class LoginComponent {
   onSubmit(): void {
     this.authService.login(this.username, this.password).subscribe(
       (response) => {
+        localStorage.setItem('token', response.token);
         this.router.navigate(['/dashboard']);
       },
       (error) => {

@@ -1,0 +1,19 @@
+<div class="container">
+  <h1>Dashboard</h1>
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>City</th>
+        <th>Temperature</th>
+        <th>Label</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let item of weatherData">
+        <td>{{ item.city }}</td>
+        <td>{{ item.temperature }} °C</td>
+        <td>{{ item.label }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
