@@ -1,5 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const cors = require('cors');
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
 const jwt = require('jsonwebtoken');
@@ -9,6 +10,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const app = express();
+app.use(cors());
 app.use(bodyParser.json());
 
 const { DB_NAME, DB_USER, DB_PASSWORD, SECRET_KEY, DB_PORT } = process.env;
