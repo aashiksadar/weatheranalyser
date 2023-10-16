@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
+const cors = require('cors');
 const { Sequelize, DataTypes } = require('sequelize');
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
@@ -12,6 +13,7 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
+app.use(cors());
 
 async function insertSampleTemperatureLabels() {
   try {
@@ -67,12 +69,10 @@ app.get('/api/weather', validateToken, async (req, res) => {
 
     const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${OPEN_WEATHER_API_KEY}&units=metric`;
       console.log(url);
-    // Fetch weather data from OpenWeatherMap
     const response = await axios.get(url);
 
     const temperature = response.data.main.temp;
 
-    // Find the corresponding label for the temperature range
     const label = await TemperatureLabel.findOne({
       where: {
         min_temperature: { [Sequelize.Op.lte]: temperature },
