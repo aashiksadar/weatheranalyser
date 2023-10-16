@@ -10,19 +10,30 @@ export class DashboardComponent implements OnInit {
 
   // Define properties to store the data
   weatherData: any[] = [
-    {'city': 'Mumbai', 'temperature': '28', 'label': 'Moderate'},
-    {'city': 'Bengaluru', 'temperature': '29', 'label': 'High'},
-    {'city': 'Kochi', 'temperature': '31', 'label': 'Very high'},
   ];
 
   constructor(private http: HttpClient) {
     console.log('DashboardComponent constructor called');
   }
 
+  populateWeather():void {
+    const cities = ['Mumbai', 'Bengaluru', 'Kochi', 'Moscow']
+    const weatherData = [];
+
+    const token = localStorage.getItem('token');
+
+    cities.forEach((city) => {
+      const headers = {
+        Authorization: `Bearer ${token}`,
+      };
+      this.http.get(`http://localhost:8001/api/weather?city=${city}`, { headers }).subscribe((response) => {
+        console.log({response});
+        this.weatherData.push({city: `${city}`, ...response});
+      });
+    });
+  }
+
   ngOnInit(): void {
-    // Fetch data from the /api/weather endpoint
-   // this.http.get<any[]>('http://localhost:8001/api/weather').subscribe(data => {
-    //  this.weatherData = data;
-    //});
+    this.populateWeather();
   }
 }
