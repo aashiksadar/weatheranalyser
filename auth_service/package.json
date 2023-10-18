@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "test": "jest"
+  },
   "dependencies": {
     "@grpc/grpc-js": "^1.9.5",
     "cors": "^2.8.5",
@@ -11,5 +14,9 @@
     "protobufjs": "^7.2.5",
     "sequelize": "^6.33.0",
     "simple-grpc-connector": "^1.0.7"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3"
   }
 }

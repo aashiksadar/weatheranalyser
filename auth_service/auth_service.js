@@ -133,3 +133,4 @@ app.listen(8000, () => {
   console.log('Authentication service is running on port 8000');
 });
 
+module.exports = app;
