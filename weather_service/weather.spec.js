@@ -1,256 +1,149 @@
-const express = require('express');
-const axios = require('axios');
-const jwt = require('jsonwebtoken');
-const { Sequelize, DataTypes } = require('sequelize');
-const grpc = require('@grpc/grpc-js');
-const protoLoader = require('@grpc/proto-loader');
-const { TemperatureLabel } = require('./models');
-const dotenv = require('dotenv');
 const request = require('supertest');
-const MockAdapter = require('axios-mock-adapter'); // Added mock adapter
+const app = require('./weather_service.js');
+const axios = require('axios');
+const MockAdapter = require('axios-mock-adapter');
+const { TemperatureLabel } = require('./models');
+const { Sequelize } = require('sequelize');
+
+
+const dotenv = require('dotenv');
 
 dotenv.config();
 
-const app = express();
-app.use(express.json());
+const { DB_NAME, DB_USER, DB_PASSWORD, DB_PORT } = process.env;
 
-const {OPEN_WEATHER_API_KEY} = process.env;
-//Insert sample temperature labels into the database (only once)
-async function insertSampleTemperatureLabels() {
-  try {
-    await TemperatureLabel.bulkCreate([
-      { min_temperature: -20, max_temperature: 0, label: 'Very Cold' },
-      { min_temperature: 0, max_temperature: 15, label: 'Cold' },
-      { min_temperature: 15, max_temperature: 25, label: 'Moderate' },
-      { min_temperature: 25, max_temperature: 40, label: 'Hot' },
-      { min_temperature: 40, max_temperature: 100, label: 'Very Hot' },
-    ]);
-
-    console.log('Sample temperature labels inserted successfully.');
-  } catch (error) {
-    console.error('Error inserting sample temperature labels:', error);
-  }
-}
-jest.mock('axios');
-
-// gRPC Service Implementation
-const packageDefinition = protoLoader.loadSync('../auth_service/auth.proto');
-const authServiceProto = grpc.loadPackageDefinition(packageDefinition).auth;
-const authServiceClient = new authServiceProto.AuthService(
-  'localhost:50051',
-  grpc.credentials.createInsecure()
-);
-
-// Middleware for token validation
-const validateToken = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ success: false, message: 'Token is missing' });
-  }
-
-  authServiceClient.isAccessTokenValid({ accessToken: token }, (error, response) => {
-    if (error || !response.isValid) {
-      return res.status(401).json({ success: false, message: 'Token is invalid or expired' });
-    }
-    next();
-  });
-};
-
-// Define the API route for weather data
-app.get('/api/weather', validateToken, async (req, res) => {
-  try {
-    const { city } = req.query;
-    const { OPEN_WEATHER_API_KEY } = process.env;
-
-    const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${OPEN_WEATHER_API_KEY}&units=metric`;
-    const response = await axios.get(url);
-
-    const temperature = response.data.main.temp;
-
-    const label = await TemperatureLabel.findOne({
-      where: {
-        min_temperature: { [Sequelize.Op.lte]: temperature },
-        max_temperature: { [Sequelize.Op.gte]: temperature },
-      },
-    });
-
-    res.status(200).json({ success: true, temperature, label: label.label });
-  } catch (error) {
-    console.error(`Error fetching weather data: ${error.message}`);
-    res.status(500).json({ success: false, error: 'Failed to fetch weather data' });
-  }
+const sequelize = new Sequelize(`postgres://${DB_USER}:${DB_PASSWORD}@localhost:${DB_PORT}/${DB_NAME}`, {
+  dialect: 'postgres',
+  logging: true, // Enable logging
 });
 
-// Initialize the server
-const PORT = 8001;
-app.listen(PORT, () => {
-  console.log(`Weather Data Service is running on port ${PORT}`);
+const temperatureLabels = [
+  { min_temperature: -20, max_temperature: 0, label: 'Very Cold' },
+  { min_temperature: 0, max_temperature: 15, label: 'Cold' },
+  { min_temperature: 15, max_temperature: 25, label: 'Moderate' },
+  { min_temperature: 25, max_temperature: 40, label: 'Hot' },
+  { min_temperature: 40, max_temperature: 100, label: 'Very Hot' },
+];
+  let authToken; // Store the retrieved authentication token
+// Before running the tests, insert the test data into the database
+beforeAll(async () => {
+  await sequelize.sync({ force: true });
+  await TemperatureLabel.bulkCreate(temperatureLabels);
+    const authResponse = await axios.post('http://localhost:8000/authenticate', {
+      username: 'james',
+      password: 'bond',
+    });
+
+    // Ensure that the authentication was successful
+    expect(authResponse.status).toBe(200);
+    expect(authResponse.data).toHaveProperty('access_token');
+    authToken = authResponse.data.access_token;
+    console.log({authToken});
 });
 
-// Set up the mock adapter for Axios
-const mock = new MockAdapter(axios);
-
-jest.spyOn(authServiceClient, 'isAccessTokenValid').mockImplementation((_, callback) => {
-  // Mock the authentication response
-  callback(null, { isValid: true });
+afterAll(async () => {
+  await sequelize.close();
 });
 
-// Tests for each temperature label
-describe('WeatherAnalyzer API Tests', () => {
-    let token; // To store the authentication token
 
-  beforeAll(async () => {
-    // Insert sample temperature labels into the database (only once)
-    await insertSampleTemperatureLabels();
+describe('Weather Service Tests', () => {
 
-    // Mock the authentication response
-    jest.spyOn(authServiceClient, 'isAccessTokenValid').mockImplementation((_, callback) => {
-      // Mock the authentication response
-      callback(null, { isValid: true });
+
+    it('should return the correct temperature label for Very Cold', async () => {
+
+    const response = await axios.get('http://localhost:8001/api/weather?city=nuuk', {
+      headers: {
+        Authorization: `Bearer ${authToken}`, // Send the access token in the request header
+      },
     });
+    console.log({"RECEIVED": response.data});
 
-    // Obtain a valid token for testing
-    const response = await request(app)
-      .post('/authenticate')
-      .send({ username: 'james', password: 'bond' }); // Replace with your actual username and password
-    token = response.body.token;
-  });
-
-  afterAll(async () => {
-    // Clean up the database after all tests
-    await TemperatureLabel.destroy({ where: {} });
-  });
-
-  it('should return the correct temperature label for Very Cold', async () => {
-          const url = `https://api.openweathermap.org/data/2.5/weather?q=cairo&appid=${OPEN_WEATHER_API_KEY}&units=metric`;
-
-    // Mock the OpenWeatherMap API response with a temperature range corresponding to Very Cold
-    mock.onGet(url).reply(200, {
-      main: { temp: -15 },
-    });
-
-    // Perform the API request to /api/weather with the mocked temperature
-    const response = await request(app).get('/api/weather?city=london').set('Authorization', `Bearer ${token}`);
-
-    // Query the database to get the actual label
-    const actualLabel = await TemperatureLabel.findOne({
+    const dbLabel = await TemperatureLabel.findOne({
       where: {
-        min_temperature: { [Sequelize.Op.lte]: -15 },
-        max_temperature: { [Sequelize.Op.gte]: -15 },
+        min_temperature: { [Sequelize.Op.lte]: response.data.temperature },
+        max_temperature: { [Sequelize.Op.gte]: response.data.temperature },
       },
     });
 
-    // Expect the response to contain the correct label
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      success: true,
-      temperature: -15,
-      label: actualLabel.label, // Compare with the actual label from the database
-    });
+    expect(dbLabel.label).toEqual('Very Cold');
   });
+    it('should return the correct temperature label for Cold', async () => {
 
-  // Similar tests for Cold, Moderate, Hot, and Very Hot labels
-  it('should return the correct temperature label for Cold', async () => {
-    // Mock the OpenWeatherMap API response with a temperature range corresponding to Cold
-    mock.onGet('https://api.openweathermap.org/data/2.5/weather?q=london&appid=YOUR_API_KEY&units=metric').reply(200, {
-      main: { temp: 10 },
+    const response = await axios.get('http://localhost:8001/api/weather?city=vancouver', {
+      headers: {
+        Authorization: `Bearer ${authToken}`, // Send the access token in the request header
+      },
     });
+    console.log({"RECEIVED": response.data});
 
-    // Perform the API request to /api/weather with the mocked temperature
-    const response = await request(app).get('/api/weather?city=london').set('Authorization', `Bearer ${token}`);
-    // Query the database to get the actual label
-    const actualLabel = await TemperatureLabel.findOne({
+    const dbLabel = await TemperatureLabel.findOne({
       where: {
-        min_temperature: { [Sequelize.Op.lte]: 10 },
-        max_temperature: { [Sequelize.Op.gte]: 10 },
+        min_temperature: { [Sequelize.Op.lte]: response.data.temperature },
+        max_temperature: { [Sequelize.Op.gte]: response.data.temperature },
       },
     });
 
-    // Expect the response to contain the correct label
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      success: true,
-      temperature: 10,
-      label: actualLabel.label, // Compare with the actual label from the database
-    });
+    expect(dbLabel.label).toEqual('Cold');
   });
+it('should return the correct temperature label for Moderate', async () => {
 
-  it('should return the correct temperature label for Moderate', async () => {
-    // Mock the OpenWeatherMap API response with a temperature range corresponding to Moderate
-    mock.onGet('https://api.openweathermap.org/data/2.5/weather?q=london&appid=YOUR_API_KEY&units=metric').reply(200, {
-      main: { temp: 18 },
+    const response = await axios.get('http://localhost:8001/api/weather?city=delhi', {
+      headers: {
+        Authorization: `Bearer ${authToken}`, // Send the access token in the request header
+      },
     });
+    console.log({"RECEIVED": response.data});
 
-    // Perform the API request to /api/weather with the mocked temperature
-    const response = await request(app).get('/api/weather?city=london').set('Authorization', `Bearer ${token}`);
-    // Query the database to get the actual label
-    const actualLabel = await TemperatureLabel.findOne({
+    const dbLabel = await TemperatureLabel.findOne({
       where: {
-        min_temperature: { [Sequelize.Op.lte]: 18 },
-        max_temperature: { [Sequelize.Op.gte]: 18 },
+        min_temperature: { [Sequelize.Op.lte]: response.data.temperature },
+        max_temperature: { [Sequelize.Op.gte]: response.data.temperature },
       },
     });
 
-    // Expect the response to contain the correct label
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      success: true,
-      temperature: 18,
-      label: actualLabel.label, // Compare with the actual label from the database
-    });
+    expect(dbLabel.label).toEqual('Moderate');
   });
+it('should return the correct temperature label for Hot', async () => {
 
-  it('should return the correct temperature label for Hot', async () => {
-    // Mock the OpenWeatherMap API response with a temperature range corresponding to Hot
-    mock.onGet('https://api.openweathermap.org/data/2.5/weather?q=london&appid=YOUR_API_KEY&units=metric').reply(200, {
-      main: { temp: 30 },
+    const response = await axios.get('http://localhost:8001/api/weather?city=jeddah', {
+      headers: {
+        Authorization: `Bearer ${authToken}`, // Send the access token in the request header
+      },
     });
+    console.log({"RECEIVED": response.data});
 
-    // Perform the API request to /api/weather with the mocked temperature
-    const response = await request(app).get('/api/weather?city=london').set('Authorization', `Bearer ${token}`);
-    // Query the database to get the actual label
-    const actualLabel = await TemperatureLabel.findOne({
+    const dbLabel = await TemperatureLabel.findOne({
       where: {
-        min_temperature: { [Sequelize.Op.lte]: 30 },
-        max_temperature: { [Sequelize.Op.gte]: 30 },
+        min_temperature: { [Sequelize.Op.lte]: response.data.temperature },
+        max_temperature: { [Sequelize.Op.gte]: response.data.temperature },
       },
     });
 
-    // Expect the response to contain the correct label
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      success: true,
-      temperature: 30,
-      label: actualLabel.label, // Compare with the actual label from the database
-    });
+    expect(dbLabel.label).toEqual('Hot');
   });
+it('should return the correct temperature label for Very Hot', async () => {
 
-  it('should return the correct temperature label for Very Hot', async () => {
-    // Mock the OpenWeatherMap API response with a temperature range corresponding to Very Hot
-    mock.onGet('https://api.openweathermap.org/data/2.5/weather?q=london&appid=YOUR_API_KEY&units=metric').reply(200, {
-      main: { temp: 50 },
+    const response = await axios.get('http://localhost:8001/api/weather?city=jeddah', {
+      headers: {
+        Authorization: `Bearer ${authToken}`, // Send the access token in the request header
+      },
     });
+    console.log({"RECEIVED": response.data});
 
-    // Perform the API request to /api/weather with the mocked temperature
-    const response = await request(app).get('/api/weather?city=london').set('Authorization', `Bearer ${token}`);
-    // Query the database to get the actual label
-    const actualLabel = await TemperatureLabel.findOne({
+    const dbLabel = await TemperatureLabel.findOne({
       where: {
-        min_temperature: { [Sequelize.Op.lte]: 50 },
-        max_temperature: { [Sequelize.Op.gte]: 50 },
+        min_temperature: { [Sequelize.Op.lte]: response.data.temperature },
+        max_temperature: { [Sequelize.Op.gte]: response.data.temperature },
       },
     });
 
-    // Expect the response to contain the correct label
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      success: true,
-      temperature: 50,
-      label: actualLabel.label, // Compare with the actual label from the database
-    });
+    expect(dbLabel.label).toEqual('Very Hot');
   });
+
 });
-
-module.exports = app;
 

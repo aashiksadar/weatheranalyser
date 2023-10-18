@@ -48,8 +48,10 @@ async function createSampleUsers() {
 }
 
 const { CREATE_SAMPLE_USERS } = process.env;
-if (CREATE_SAMPLE_USERS && !!CREATE_SAMPLE_USERS) {
+if (CREATE_SAMPLE_USERS == true) {
   createSampleUsers();
+} else {
+    console.log("Skipping sample user creation");
 }
 
 app.post('/authenticate', async (req, res) => {
